@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OTP Registration</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 20px; }
+        .container { background: #f9f9f9; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        input, button { width: 100%; padding: 10px; margin: 8px 0; box-sizing: border-box; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .hidden { display: none; }
+        .error { color: red; margin: 5px 0; }
+        .success { color: green; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 id="pageTitle">Register / Login with OTP</h2>
+        
+        <!-- Registration / Login Form -->
+        <div id="authSection">
+            <input type="text" id="name" placeholder="Full Name" required>
+            <input type="email" id="email" placeholder="Gmail Address" required>
+            <button id="sendOtpBtn">Send OTP</button>
+            <div id="otpSection" class="hidden">
+                <input type="text" id="otp" placeholder="Enter 6-digit OTP" maxlength="6">
+                <button id="verifyOtpBtn">Verify & Login</button>
+            </div>
+            <div id="message"></div>
+        </div>
+
+        <!-- Dashboard Section (hidden initially) -->
+        <div id="dashboardSection" class="hidden">
+            <h3>Welcome, <span id="userName"></span>!</h3>
+            <p>Total Registered Users: <strong id="totalUsers"></strong></p>
+            <h4>All Registered Users:</h4>
+            <table id="usersTable">
+                <thead>
+                    <tr><th>Name</th><th>Email</th></tr>
+                </thead>
+                <tbody id="usersTableBody"></tbody>
+            </table>
+            <button id="logoutBtn">Logout</button>
+        </div>
+    </div>
+
+    <script>
+        const authSection = document.getElementById('authSection');
+        const dashboardSection = document.getElementById('dashboardSection');
+        const otpSection = document.getElementById('otpSection');
+        const sendOtpBtn = document.getElementById('sendOtpBtn');
+        const verifyOtpBtn = document.getElementById('verifyOtpBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const messageDiv = document.getElementById('message');
+
+        let currentEmail = '';
+
+        // Check if user is already logged in (session exists)
+        async function checkSession() {
+            try {
+                const res = await fetch('/api/dashboard');
+                if (res.ok) {
+                    const data = await res.json();
+                    showDashboard(data);
+                }
+            } catch (err) {
+                // Not logged in, do nothing
+            }
+        }
+        checkSession();
+
+        // Send OTP
+        sendOtpBtn.addEventListener('click', async () => {
+            const name = document.getElementById('name').value.trim();
+            const email = document.getElementById('email').value.trim();
+            
+            if (!name || !email) {
+                showMessage('Please enter name and email', 'error');
+                return;
+            }
+
+            currentEmail = email;
+            showMessage('Sending OTP...', 'success');
+
+            try {
+                const res = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, email })
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    showMessage(data.message, 'success');
+                    otpSection.classList.remove('hidden');
+                    sendOtpBtn.disabled = true;
+                } else {
+                    showMessage(data.error, 'error');
+                }
+            } catch (err) {
+                showMessage('Network error', 'error');
+            }
+        });
+
+        // Verify OTP
+        verifyOtpBtn.addEventListener('click', async () => {
+            const otp = document.getElementById('otp').value.trim();
+            if (!otp || otp.length !== 6) {
+                showMessage('Please enter a valid 6-digit OTP', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/verify-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: currentEmail, otp })
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    showMessage('Login successful!', 'success');
+                    // Fetch dashboard after login
+                    const dashRes = await fetch('/api/dashboard');
+                    const dashData = await dashRes.json();
+                    showDashboard(dashData);
+                } else {
+                    showMessage(data.error, 'error');
+                }
+            } catch (err) {
+                showMessage('Network error', 'error');
+            }
+        });
+
+        // Logout
+        logoutBtn.addEventListener('click', async () => {
+            await fetch('/api/logout', { method: 'POST' });
+            authSection.classList.remove('hidden');
+            dashboardSection.classList.add('hidden');
+            otpSection.classList.add('hidden');
+            sendOtpBtn.disabled = false;
+            document.getElementById('name').value = '';
+            document.getElementById('email').value = '';
+            document.getElementById('otp').value = '';
+            showMessage('', '');
+        });
+
+        function showDashboard(data) {
+            authSection.classList.add('hidden');
+            dashboardSection.classList.remove('hidden');
+            document.getElementById('userName').textContent = data.currentUser.name;
+            document.getElementById('totalUsers').textContent = data.totalRegistered;
+
+            const tbody = document.getElementById('usersTableBody');
+            tbody.innerHTML = '';
+            data.allUsers.forEach(user => {
+                const row = `<tr><td>${user.name}</td><td>${user.email}</td></tr>`;
+                tbody.innerHTML += row;
+            });
+        }
+
+        function showMessage(msg, type) {
+            messageDiv.textContent = msg;
+            messageDiv.className = type;
+        }
+    </script>
+</body>
+</html>
